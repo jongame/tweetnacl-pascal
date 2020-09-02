@@ -1,0 +1,6 @@
+*.exe
+*.lpi
+*.lps
+*.res
+.backup
+.lib
