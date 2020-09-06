@@ -663,7 +663,7 @@ begin
   result := crypto_scalarmult_base(y,x);
 end;
 
-function    crypto_box_beforenm(k : pu8; const y : pu8; const x : pu8):i32;
+function crypto_box_beforenm(k : pu8; const y : pu8; const x : pu8):i32;
 var
   s : array[0..31] of u8;
 begin
@@ -693,16 +693,8 @@ function crypto_box_open(m : pu8; const c : pu8; d : u64; const n : pu8; const y
 var
   k : array[0..31] of u8;
 begin
-
-  //Form1.logm.Lines.Add(Memory2Str(c, 48));
-  //Form1.logm.Lines.Add(IntToStr(d));
-  //Form1.logm.Lines.Add(Memory2Str(n, 24));
-  //Form1.logm.Lines.Add(Memory2Str(y, 32));
-  //Form1.logm.Lines.Add(Memory2Str(x, 32));
   crypto_box_beforenm(k,y,x);
-  //Form1.logm.Lines.Add('K:' + Memory2Str(@k, 32));
   result := crypto_box_open_afternm(m,c,d,n,k);
-  //Form1.logm.Lines.Add(Memory2Str(m + crypto_box_ZEROBYTES, 48));
 end;
 
 function R(x : u64; c : i32):u64;
@@ -793,8 +785,9 @@ begin
 
   for i:=0 to 255 do
     x[i] := 0;
-  for i:=0 to n-1 do
-    x[i] := m[i];
+  if n<>0 then
+    for i:=0 to n-1 do
+      x[i] := m[i];
   x[n] := 128;
 
   if (n<112) then
@@ -1071,10 +1064,6 @@ begin
   mlen^ := n;
   result := 0;
 end;
-
-
-
-
 
 end.
 
