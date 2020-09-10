@@ -23,6 +23,7 @@ type
     Button16: TButton;
     Button17: TButton;
     Button18: TButton;
+    Button2: TButton;
     Button20: TButton;
     Button21: TButton;
     Button3: TButton;
@@ -85,6 +86,7 @@ type
     procedure Button1Click(Sender: TObject);
     procedure Button20Click(Sender: TObject);
     procedure Button21Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure Button7Click(Sender: TObject);
     procedure datamemoKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -159,6 +161,16 @@ begin
   crypto_box(@c[1], @m[1], Length(m), @n[1], @pk[1], @sk[1]);
   Delete(c, 1, crypto_box_BOXZEROBYTES);
   Memo5.Lines.Text := EncodeStringBase64(c);
+end;
+
+procedure TForm1.Button2Click(Sender: TObject);
+var
+  s, r: string;
+begin
+  s := datamemo.Lines.Text;
+  SetLength(r, Length(s) div 2);
+  HexToBin(@s[1],@r[1],Length(r));
+  datamemo.Lines.Text := EncodeStringBase64(r);
 end;
 
 procedure TForm1.Button3Click(Sender: TObject);
@@ -358,11 +370,8 @@ var
   m,h : string;
   mlen: u64;
 begin
-
   m := datamemo.Lines.Text;
-  if Length(m)=0 then
-    exit;
-  SetLength(h,64);
+  SetLength(h, crypto_hash_sha512);
   mlen := Length(m);
   if crypto_hash(@h[1], @m[1], mlen)<>0 then begin
     datamemo.Lines.Text := 'error';
@@ -385,9 +394,8 @@ procedure TForm1.hashButtonClick(Sender: TObject);
 var
   m,h : string;
 begin
-  SetLength(h,64);
+  SetLength(h, crypto_hash_sha512);
   m := datamemo.Lines.Text;
-  if Length(m)=0 then exit;
   if crypto_hash(@h[1], @m[1], Length(m))<>0 then begin
     datamemo.Lines.Text := 'error';
     exit;

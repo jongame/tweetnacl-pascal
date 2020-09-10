@@ -48,6 +48,7 @@ const
   crypto_secretbox_KEYBYTES = 32;
   crypto_secretbox_NONCEBYTES = 24;
   crypto_secretbox_ZEROBYTES = 32;
+  crypto_hash_sha512 = 64;
 
 implementation
 
