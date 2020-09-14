@@ -1,6 +1,11 @@
 unit tweetnacl;
 
-{$mode objfpc}{$H+}{$Q-}
+{$IFDEF FPC}
+  {$mode objfpc}{$H+}{$Q-}
+{$ELSE}
+  {$POINTERMATH ON}
+{$ENDIF}
+
 
 interface
 
@@ -14,7 +19,7 @@ type
   i8 = Int8;
   i32 = Int32;
   i64 =  Int64;
-  pu8 = pUInt8;
+  pu8 = ^u8;
   pu32 = pUInt64;
   pu64 = pUInt64;
   pi64 = pInt64;
@@ -95,6 +100,18 @@ const
   $ed, $d3, $f5, $5c, $1a, $63, $12, $58, $d6, $9c,$f7, $a2, $de,
   $f9,$de, $14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, $10);
 
+{$IF not defined(FPC)}
+function SarInt64(Const a : Int64;b : Byte): Int64;
+begin
+  Result := (a shr b) or (( 0-((a shr 63) and 1)) shl (64-b));
+end;
+
+
+function SarLongint(Const a : Int32;b : Byte): Int32;
+begin
+  Result := (a shr b) or (( 0-((a shr 31) and 1)) shl (32-b));
+end;
+{$IFEND}
 procedure randombytes(data : pu8; size : u64);
 var
   i : i32;
@@ -105,7 +122,7 @@ end;
 
 function L32(x : u32; c : i32):u32;
 begin
-  result := (x << c) OR (SarInt64((x AND $ffffffff), (32 - c)));
+  result := (x shl c) OR (SarInt64((x AND $ffffffff), (32 - c)));
 end;
 
 function ld32(const x : pu8):u32;
@@ -113,19 +130,18 @@ var
   u : u32;
 begin
   u := x[3];
-  u := (u<<8) OR x[2];
-  u := (u<<8) OR x[1];
-  result := (u<<8) OR x[0];
+  u := (u shl 8) OR x[2];
+  u := (u shl 8) OR x[1];
+  result := (u shl 8) OR x[0];
 end;
 
 function dl64(const x : pu8):u64;
 var
   i,u : u64;
 begin
-  i := 0;
   u := 0;
   for i:=0 to 7 do
-    u := (u<<8) OR x[i];
+    u := (u shl 8) OR x[i];
   result := u;
 end;
 
@@ -145,7 +161,7 @@ var
 begin
   for i:=7 downto 0 do begin
     x[i] := u;
-    u := u >> 8;
+    u := u shr 8;
   end;
 end;
 
@@ -153,7 +169,6 @@ function vn(const x : pu8; const y : pu8; n : i32):i32;
 var
   i,d : i32;
 begin
-  i := 0;
   d := 0;
   for i:=0 to n-1 do
     d := d OR (x[i] XOR y[i]);
@@ -204,10 +219,10 @@ begin
 
   if (h<>0) then begin
     for i:=0 to 15 do
-      x[i] += y[i];
+      x[i] := x[i] + y[i];
     for i:=0 to 3 do begin
-      x[5*i] -= ld32(c+4*i);
-      x[6+i] -= ld32(ind+4*i);
+      x[5*i] := x[5*i] - ld32(c+4*i);
+      x[6+i] := x[6+i] - ld32(ind+4*i);
     end;
 
     for i:=0 to 3 do begin
@@ -243,7 +258,7 @@ begin
   for i:=0 to 7 do
     z[i] := n[i];
   while (b >= 64) do begin
-    crypto_core_salsa20(x,z,k,sigma);
+    crypto_core_salsa20(@x,@z,k,@sigma);
     for i:=0 to 63 do
       if (m<>nil) then
         c[i] := m[i] XOR x[i]
@@ -252,17 +267,17 @@ begin
 
     u := 1;
     for i:=8 to 15 do begin
-      u += z[i];
+      u := u + z[i];
       z[i] := u;
-      u := u >> 8;
+      u := u shr 8;
     end;
-    b -= 64;
-    c += 64;
+    b := b - 64;
+    c := c + 64;
     if (m<>nil) then
-      m += 64;
+      m := m + 64;
   end;
   if (b<>0) then begin
-    crypto_core_salsa20(x,z,k,sigma);
+    crypto_core_salsa20(@x,@z,k,@sigma);
     for i:=0 to b-1 do
       if (m<>nil) then
         c[i] := m[i] XOR x[i]
@@ -281,28 +296,27 @@ function crypto_stream(c : pu8; d : u64; const n : pu8; const k : pu8):i32;
 var
   s : array[0..31] of u8;
 begin
-  crypto_core_hsalsa20(s,n,k,sigma);
-  result := crypto_stream_salsa20(c,d,n+16,s);
+  crypto_core_hsalsa20(@s,n,k,@sigma);
+  result := crypto_stream_salsa20(c,d,n+16,@s);
 end;
 
 function crypto_stream_xor(c : pu8; const m : pu8; d : u64; const n : pu8; const k : pu8):i32;
 var
   s : array[0..31] of u8;
 begin
-  crypto_core_hsalsa20(s,n,k,sigma);
-  result := crypto_stream_salsa20_xor(c,m,d,n+16,s);
+  crypto_core_hsalsa20(@s,n,k,@sigma);
+  result := crypto_stream_salsa20_xor(c,m,d,n+16,@s);
 end;
 
 procedure add1305(h : pu32; const c : pu32);
 var
   j,u : u32;
 begin
-  j := 0;
   u := 0;
   for j:=0 to 16 do begin
-    u += h[j] + c[j];
+    u := u + h[j] + c[j];
     h[j] := u AND 255;
-    u := u >> 8;
+    u := u shr 8;
   end;
 end;
 
@@ -334,46 +348,46 @@ begin
       inc(j);
     end;
     c[j] := 1;
-    m += j; n -= j;
-    add1305(h,c);
+    m := m + j; n := n - j;
+    add1305(@h,@c);
     for i:=0 to 16 do begin
       x[i] := 0;
       for j:=0 to 16 do
         if (j <= i) then
-          x[i] += h[j] * (r[i - j])
+          x[i] := x[i] + h[j] * (r[i - j])
         else
-          x[i] += h[j] * (320 * r[i + 17 - j]);
+          x[i] := x[i] + h[j] * (320 * r[i + 17 - j]);
     end;
     for i:=0 to 16 do
       h[i] := x[i];
     u := 0;
     for j:=0 to 15 do begin
-      u += h[j];
+      u := u + h[j];
       h[j] := u AND 255;
-      u := u >> 8;
+      u := u shr 8;
     end;
-    u += h[16];
+    u := u + h[16];
     h[16] := u AND 3;
-    u := 5 * (u >> 2);
+    u := 5 * (u shr 2);
     for j:=0 to 15 do begin
-      u += h[j];
+      u := u + h[j];
       h[j] := u AND 255;
-      u := u >> 8;
+      u := u shr 8;
     end;
-    u += h[16];
+    u := u + h[16];
     h[16] := u;
   end;
   for j:=0 to 16 do
     g[j] := h[j];
-  add1305(h,minusp);
-  s := -(h[16] >> 7);
+  add1305(@h,@minusp);
+  s := -(h[16] shr 7);
   for j:=0 to 16 do
     h[j] := h[j] XOR (s AND (g[j] XOR h[j]));
 
   for j:=0 to 15 do
     c[j] := k[j + 16];
   c[16] := 0;
-  add1305(h,c);
+  add1305(@h,@c);
   for j:=0 to 15 do
     outd[j] := h[j];
   result := 0;
@@ -383,8 +397,8 @@ function crypto_onetimeauth_verify(const h : pu8; const m : pu8; n : u64; const 
 var
   x : array[0..15] of u8;
 begin
-  crypto_onetimeauth(x,m,n,k);
-  result := crypto_verify_16(h,x);
+  crypto_onetimeauth(@x,m,n,k);
+  result := crypto_verify_16(h,@x);
 end;
 
 function crypto_secretbox(c : pu8; const m : pu8; d : u64; const n : pu8; const k : pu8):i32;
@@ -406,8 +420,8 @@ var
 begin
   if (d < 32) then
     exit(-1);
-  crypto_stream(x,32,n,k);
-  if (crypto_onetimeauth_verify(c + 16,c + 32,d - 32,x) <> 0) then
+  crypto_stream(@x,32,n,k);
+  if (crypto_onetimeauth_verify(c + 16,c + 32,d - 32,@x) <> 0) then
     exit(-1);
   crypto_stream_xor(m,c,d,n,k);
   for i:=0 to 31 do
@@ -429,14 +443,14 @@ var
   c : i64;
 begin
   for i:=0 to 15 do  begin
-    o[i] += 1<<16;
+    o[i] := o[i] + (1 shl 16);
     c := SarInt64(o[i], 16);
 
     if i<15 then
-      o[i+1] += c-1
+      o[i+1] := o[i+1] + (c-1)
     else
-      o[0] += 38*(c-1);
-    o[i] -= c<<16;
+      o[0] := o[0] + 38*(c-1);
+    o[i] := o[i] - (c shl 16);
   end;
 end;
 
@@ -475,7 +489,7 @@ begin
   end;
   for i:=0 to 15 do begin
     o[2*i] := t[i] AND $ff;
-    o[2*i+1] := t[i]>>8;
+    o[2*i+1] := t[i] shr 8;
   end;
 end;
 
@@ -483,16 +497,16 @@ function neq25519(const a : gf; const b : gf):i32;
 var
   c,d : array[0..31] of u8;
 begin
-  pack25519(c,a);
-  pack25519(d,b);
-  result := crypto_verify_32(c,d);
+  pack25519(@c,@a);
+  pack25519(@d,@b);
+  result := crypto_verify_32(@c,@d);
 end;
 
 function par25519(const a : gf):u8;
 var
   d : array[0..31] of u8;
 begin
-  pack25519(d,a);
+  pack25519(@d,@a);
   result := d[0] AND 1;
 end;
 
@@ -501,7 +515,7 @@ var
   i : i32;
 begin
   for i:=0 to 15 do
-    o[i] := n[2*i]+(n[2*i+1]<<8);
+    o[i] := n[2*i]+(n[2*i+1] shl 8);
   o[15] := o[15] AND $7fff;
 end;
 
@@ -510,7 +524,7 @@ var
   i : i32;
 begin
   for i:=0 to 15 do
-    o[i] := n[2*i]+(n[2*i+1]<<8);
+    o[i] := n[2*i]+(n[2*i+1] shl 8);
   o[15] := o[15] AND $7fff;
 end;
 
@@ -539,10 +553,10 @@ begin
     t[i] := 0;
   for i:=0 to 15 do
     for j:=0 to 15 do
-        t[i+j] += a[i]*b[j];
+        t[i+j] := t[i+j] + (a[i]*b[j]);
 
   for i:=0 to 14 do
-    t[i] += 38*t[i+16];
+    t[i] := t[i] + (38*t[i+16]);
 
   for i:=0 to 15 do
     o[i] := t[i];
@@ -606,7 +620,7 @@ begin
   _z[31] := (n[31]AND 127)OR 64;
   _z[0] :=_z[0] AND 248;
 
-  unpack25519(x,p);
+  unpack25519(@x,p);
   for i:=0 to 15 do begin
     b[i] := x[i];
     d[i] := 0; _a[i] := 0; c[i] :=0;
@@ -614,7 +628,7 @@ begin
 
   _a[0] := 1; d[0] := 1;
   for i:=254 downto 0 do begin
-    r := (SarInt64(_z[i>>3], (i AND 7)))AND 1;
+    r := (SarInt64(_z[i shr 3], (i AND 7)))AND 1;
     sel25519(_a,b,r);
     sel25519(c,d,r);
     A(e,_a,c);
@@ -649,13 +663,13 @@ begin
   inv25519(pgf(@x[32])^,pgf(@x[32])^);
   M(pgf(@x[16])^,pgf(@x[16])^,pgf(@x[32])^);
 
-  pack25519(q,pgf(@x[16])^);
+  pack25519(q,@x[16]);
   result := 0;
 end;
 
 function crypto_scalarmult_base(q : pu8; const n : pu8):i32;
 begin
-  result := crypto_scalarmult(q,n,_9);
+  result := crypto_scalarmult(q,n,@_9);
 end;
 
 function crypto_box_keypair(y : pu8; x : pu8):i32;
@@ -668,8 +682,8 @@ function crypto_box_beforenm(k : pu8; const y : pu8; const x : pu8):i32;
 var
   s : array[0..31] of u8;
 begin
-  crypto_scalarmult(s,x,y);
-  result := crypto_core_hsalsa20(k,_0,s,sigma);
+  crypto_scalarmult(@s,x,y);
+  result := crypto_core_hsalsa20(k,@_0,@s,@sigma);
 end;
 
 function crypto_box_afternm(c : pu8; const m : pu8; d : u64; const n : pu8; const k : pu8):i32;
@@ -686,21 +700,21 @@ function crypto_box(c : pu8; const m : pu8; d : u64; const n : pu8; const y : pu
 var
   k : array[0..31] of u8;
 begin
-  crypto_box_beforenm(k,y,x);
-  result := crypto_box_afternm(c,m,d,n,k);
+  crypto_box_beforenm(@k,y,x);
+  result := crypto_box_afternm(c,m,d,n,@k);
 end;
 
 function crypto_box_open(m : pu8; const c : pu8; d : u64; const n : pu8; const y : pu8; const x : pu8):i32;
 var
   k : array[0..31] of u8;
 begin
-  crypto_box_beforenm(k,y,x);
-  result := crypto_box_open_afternm(m,c,d,n,k);
+  crypto_box_beforenm(@k,y,x);
+  result := crypto_box_open_afternm(m,c,d,n,@k);
 end;
 
 function R(x : u64; c : i32):u64;
 begin
-  result :=  (x >> c) OR (x << (64 - c));
+  result :=  (x shr c) OR (x shl (64 - c));
 end;
 
 function Ch(x : u64; y : u64; z : u64):u64;
@@ -725,12 +739,12 @@ end;
 
 function _sigma0(x : u64):u64;
 begin
-  result := R(x, 1) XOR R(x, 8) XOR (x >> 7);
+  result := R(x, 1) XOR R(x, 8) XOR (x shr 7);
 end;
 
 function _sigma1(x : u64):u64;
 begin
-  result :=R(x,19) XOR R(x,61) XOR (x >> 6);
+  result :=R(x,19) XOR R(x,61) XOR (x shr 6);
 end;
 
 function crypto_hashblocks(x : pu8; m : pu8; n : u64):i32;
@@ -752,18 +766,18 @@ begin
         b[j] := a[j];
       t := a[7] + Sigma1(a[4]) + Ch(a[4],a[5],a[6]) + constK[i] + w[i mod 16];
       b[7] := t + Sigma0(a[0]) + Maj(a[0],a[1],a[2]);
-      b[3] += t;
+      b[3] := b[3] + t;
       for j:=0 to 7 do
         a[(j+1)mod 8] := b[j];
       if ((i mod 16) = 15) then
 	for j:=0 to 15 do
-	  w[j] += w[(j+9) mod 16] + _sigma0(w[(j+1) mod 16]) + _sigma1(w[(j+14)mod 16]);
+	  w[j] := w[j] + w[(j+9) mod 16] + _sigma0(w[(j+1) mod 16]) + _sigma1(w[(j+14)mod 16]);
     end;
     for i:=0 to 7 do begin
-      a[i] += z[i]; z[i] := a[i];
+      a[i] := a[i] + z[i]; z[i] := a[i];
     end;
-    m += 128;
-    n -= 128;
+    m := m + 128;
+    n := n - 128;
   end;
   for i:=0 to 7 do
     ts64(x+8*i,z[i]);
@@ -779,10 +793,10 @@ begin
   b := n;
   for i:=0 to 63 do
     h[i] := iv[i];
-  crypto_hashblocks(h,m,n);
-  m += n;
+  crypto_hashblocks(@h,m,n);
+  m := m + n;
   n := n AND 127;
-  m -= n;
+  m := m - n;
 
   for i:=0 to 255 do
     x[i] := 0;
@@ -795,9 +809,9 @@ begin
     n := 256-128
   else
     n := 256;
-  x[n-9] := b >> 61;
-  ts64(@x[0]+n-8,b<<3);
-  crypto_hashblocks(h,x,n);
+  x[n-9] := b shr 61;
+  ts64(@x[n-8],b shl 3);
+  crypto_hashblocks(@h,@x,n);
 
   for i:=0 to 63 do
     outd[i] := h[i];
@@ -844,8 +858,8 @@ begin
   inv25519(zi, p[2]);
   M(tx, p[0], zi);
   M(ty, p[1], zi);
-  pack25519(r, ty);
-  r[31] := r[31] XOR par25519(tx) << 7;
+  pack25519(r, @ty);
+  r[31] := r[31] XOR par25519(tx) shl 7;
 end;
 
 procedure scalarmult(var p : gf4; var q : gf4; const s : pu8);
@@ -859,7 +873,7 @@ begin
   set25519(p[3],gf0);
 
   for i:=255 downto 0 do begin
-    b := (s[i div 8]>>(i AND 7)) AND 1;
+    b := (s[i div 8] shr (i AND 7)) AND 1;
     cswap(p,q,b);
     add(q,p);
     add(p,p);
@@ -885,12 +899,12 @@ var
   i : i32;
 begin
   randombytes(sk, 32);
-  crypto_hash(d, sk, 32);
+  crypto_hash(@d, sk, 32);
   d[0] := d[0] AND 248;
   d[31] := d[31] AND 127;
   d[31] := d[31] OR 64;
 
-  scalarbase(p,d);
+  scalarbase(p,@d);
   pack(pk,p);
 
   for i:=0 to 31 do
@@ -906,31 +920,31 @@ begin
     carry := 0;
     j := i - 32;
     while (j < (i - 12)) do begin
-      x[j] += carry - 16 * x[i] * L[j - (i - 32)];
+      x[j] := x[j] + (carry - 16 * x[i] * L[j - (i - 32)]);
       carry := SARInt64((x[j] + 128), 8);
-      x[j] -= carry << 8;
+      x[j] := x[j] - (carry shl 8);
       inc(j);
     end;
-    x[j] += carry;
+    x[j] := x[j] + carry;
     x[i] := 0;
   end;
   carry := 0;
   for j:=0 to 31 do begin
-    x[j] += carry - SARInt64(x[31], 4) * L[j];
+    x[j] := x[j] + (carry - SARInt64(x[31], 4) * L[j]);
     carry := SARInt64(x[j], 8);
     x[j] := x[j] AND 255;
   end;
   for j:=0 to 31 do
-    x[j] -= carry * L[j];
+    x[j] := x[j] - (carry * L[j]);
   for i:=0 to 31 do begin
-    x[i+1] += SARInt64(x[i], 8);
+    x[i+1] := x[i+1] + SARInt64(x[i], 8);
     r[i] := x[i] AND 255;
   end;
 end;
 
 procedure reduce(r : pu8);
 var
-  x : array[0..63] of i64;
+  x : i6464;
   i : i64;
 begin
   for i:=0 to 63 do
@@ -948,7 +962,7 @@ var
   x : i6464;
   p : gf4;
 begin
-  crypto_hash(d, sk, 32);
+  crypto_hash(@d, sk, 32);
   d[0] := d[0] AND 248;
   d[31] := d[31] AND 127;
   d[31] := d[31] OR 64;
@@ -961,8 +975,8 @@ begin
   for i:=0 to 31 do
     sm[32 + i] := d[32 + i];
 
-  crypto_hash(r, sm+32, n+32);
-  reduce(r);
+  crypto_hash(@r, sm+32, n+32);
+  reduce(@r);
   scalarbase(p,@r[0]);
   pack(sm,p);
 
@@ -977,7 +991,7 @@ begin
     x[i] := r[i];
   for i:=0 to 31 do
     for j:=0 to 31 do
-      x[i+j] += h[i] * d[j];
+      x[i+j] := x[i+j] + h[i] * d[j];
   modL(sm + 32,x);
   result := 0;
 end;
@@ -986,11 +1000,8 @@ function unpackneg(var r : gf4; const p : pu8):i32;
 var
   t,chk,num,den,den2,den4,den6 : gf;
 begin
-
   set25519(r[2],gf1);
-
   unpack25519(r[1],p);
-
   S(num,r[1]);
   M(den,num,constD);
   Z(num,num,r[2]);
@@ -1016,11 +1027,10 @@ begin
   S(chk,r[0]);
   M(chk,chk,den);
   if (neq25519(chk, num)<>0) then
-    result := -1;
-  if (par25519(r[0]) = (p[31] >> 7)) then
+    exit(-1);
+  if (par25519(r[0]) = (p[31] shr 7)) then
     Z(r[0],gf0,r[0]);
   M(r[3],r[0],r[1]);
-
   result := 0;
 end;
 
@@ -1043,18 +1053,18 @@ begin
   for i:=0 to 31 do
     m[i+32] := pk[i];
 
-  crypto_hash(h,m,n);
+  crypto_hash(@h,m,n);
 
-  reduce(h);
+  reduce(@h);
 
-  scalarmult(p,q,h);
+  scalarmult(p,q,@h);
   scalarbase(q,sm + 32);
 
   add(p,q);
-  pack(t,p);
+  pack(@t,p);
 
-  n -= 64;
-  if (crypto_verify_32(sm, t)<>0) then begin
+  n := n - 64;
+  if (crypto_verify_32(sm, @t)<>0) then begin
     for i:=0 to n-1 do
       m[i] := 0;
     exit(-1);
@@ -1067,4 +1077,3 @@ begin
 end;
 
 end.
-
