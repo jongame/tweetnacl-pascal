@@ -10,7 +10,7 @@ unit tweetnacl;
 interface
 
 uses
-  Classes, SysUtils, Math;
+  Classes, SysUtils;
 
 type
   u8  = UInt8;
@@ -1076,4 +1076,6 @@ begin
   result := 0;
 end;
 
+begin
+  Randomize();
 end.
